@@ -7,13 +7,10 @@
 #define SYS_OPENGL_COMBATIBILITY
 #define SYS_IMPLEMENTATION
 #include "sys.h"
-
 #define LINEAR_ALGEBRA_IMPLEMENTATION
 #include "linear_algebra.h"
 
 #include "stb_easy_font.h"
-
-
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
@@ -24,8 +21,9 @@
 #define MAP_GRID_SIZE 1024
 #define MAX_ARMY_SIZE 256
 #define MAP_SEED 314159268
-#define GRID_SIZE 32
+#define GRID_SIZE 16
 #define LOG_FILE "log.txt"
+#define NOISE_STEP 1.0f
 //=============================================================================
 //
 //
@@ -126,6 +124,7 @@ Sys_Config init(int argc, char **argv) {
     cfg.height = 768;
     cfg.memory = sys_alloc(1024 * 1024 * 4, 0); // 4 megabytes memory
     cfg.title = "I have no idea what I am doing";
+    // NOTE(rayalan): sys.h fails if you start fullscreen adn alt+enter
 
     Game_State *state = (Game_State *)cfg.memory.ptr;
 
@@ -156,16 +155,15 @@ Sys_Config init(int argc, char **argv) {
     srand(MAP_SEED);
     // /TODO(rayalan): fill the map type information with random values between
     //  0 and 16?
-    printf("random map:\n");
+
+#if 1
     for(int i = 0; i < MAP_GRID_SIZE; i++) {
         for(int j = 0; j < MAP_GRID_SIZE; j++) {
             // this means that the type can indicate any texture from the bottom row of the sprite sheet
-            state->tile[i][j].type = rand() % 16;
-            printf("%i ", state->tile[i][j].type );
+            state->tile[i][j].type = rand() % 9;
         }
-        printf("\n");
     }
-    printf("\n");
+#endif 
     state->camera.x = 512;
     state->camera.y = 512;
     return cfg;
@@ -300,30 +298,6 @@ void quit(Sys_State *sys) {
 }
 
 /* TODO(rayalan): 
-    [x] draw selection box
-    [x] draw strings with justification
 
-    what does the sprite sheet look like? 
-    how big is the map?
-
-    max units 1024? 
-        data per unit
-        hp int
-        unit type int
-        resource (could be hunger or mana or whatever depending on unit) u16
-        cooldown[4]  double q w e r attach, 
-
-    map size 1024 * 1024 
-        type int
-        resource amount int
-        units on tile?
-        flags -> no need just use extra tile_type like tile_type_walkable if(tile.type > TILE_TYPE_WALKABLE) { // you can walk here }
-            -> will be blank spaces in sprite sheet at these values
-            walkable?
-            swimable?
-            
-        
-
-    [kind of] draw static textured rectangles 
-    draw animated textured rectangles 
+   map generation
 */
