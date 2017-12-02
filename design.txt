@@ -1,0 +1,34 @@
+the more you have the WORSE it is
+
+rts style combat -> the more units you have the harder the game is to control
+	-> doesn't mean the game is worse
+
+perspective = top down ? (simplest graphically)
+
+
+what gets worse with the more units you have? 
+	game gets harder to control but making the controls even
+	harder isn't really fun
+
+	
+
+rts survival? 
+	you have to feed the units you have contrinuously
+	horde of enemies tries to attack you 
+	the more people you have the more enemies you deal with
+
+
+what resources do you need to deal with
+	food
+		when units are not hungry they heal small wounds over time
+	first aid
+		heals units from critical damage
+	painkillers
+		take less damage
+	trees/stones?
+	
+critical damage
+	when a unit takes more than 1/2 their hp in damage they bleed out
+		slowly
+	under 1/4 hp units move very slowly, must be assisted
+	can be fixed with first aid
