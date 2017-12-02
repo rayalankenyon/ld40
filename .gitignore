@@ -1,0 +1,8 @@
+*.exe
+*.ilk
+*.out
+*.obj
+*.pdb
+/.vs/
+.DS_Store
+.*.*.un~
