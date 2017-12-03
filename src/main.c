@@ -107,12 +107,15 @@ typedef enum Unit_Type {
     UNIT_TYPE_MAX
 } Unit_Type;
 
-// 24 bytes * 512 total units = 12 KB
+#define UNIT_FLAG_MOVING    0x00000001
+#define UNIT_FLAG_SWIMMING  0x00000002
+
 typedef struct Unit { 
-    float x, y;
+    float x, y, look_x, look_y;
     int type;
     int hp;
     int resource;
+    int flags; // is_moving / etc
     float cooldowns[COOLDOWN_MAX];
 } Unit;
 
@@ -249,7 +252,7 @@ void loop(Sys_State *sys) {
         // TODO(rayalan): this is where you select units
         //
         int pressed_x = state->camera.x + (int)(state->mouse_pressed.x * GRID_SIZE / sys->width);
-        int pressed_y = state->camera.x + (int)(state->mouse_pressed.y * GRID_SIZE / sys->height);
+        int pressed_y = state->camera.y + (int)(state->mouse_pressed.y * GRID_SIZE / sys->height);
         int released_x = state->camera.x + (int)(sys->mouse.x * GRID_SIZE / sys->width);
         int released_y = state->camera.y + (int)(sys->mouse.y * GRID_SIZE / sys->height);
         int box_left = (pressed_x <= released_x) ? pressed_x : released_x;
@@ -270,6 +273,15 @@ void loop(Sys_State *sys) {
             }
         }
  
+    }
+    if(sys_key_pressed(SYS_MOUSE_RIGHT)) {
+        if(state->selection_count) {
+            for(int i = 0; i < state->selection_count; i++) {
+                state->selection[i]->look_x = state->camera.x + (float)(state->mouse_pressed.x * GRID_SIZE / sys->width);
+                state->selection[i]->look_y =  state->camera.y + (float)(state->mouse_pressed.y * GRID_SIZE / sys->height);
+                state->selection[i]->flags |= UNIT_FLAG_MOVING; 
+            }
+        }
     }
 
     if(sys_key_down('O')) {
@@ -309,6 +321,14 @@ void loop(Sys_State *sys) {
     if(sys_key_pressed(SYS_KEY_ESC)) { // select none
         state->selection_count = 0;
     }
+
+
+    // UPDATE logic
+    
+
+
+
+
 
     // DRAW map
     float render_size = 1.0f/ GRID_SIZE;
