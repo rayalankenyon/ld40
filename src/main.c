@@ -16,14 +16,15 @@
 
 #include <math.h>
 #include <string.h>
+#include <inttypes.h>
 
 #define SPRITE_SHEET_NAME "sprites.png"
 #define MAP_GRID_SIZE 1024
 #define MAX_ARMY_SIZE 256
-#define MAP_SEED 314159268
 #define GRID_SIZE 16
 #define LOG_FILE "log.txt"
 #define NOISE_STEP 1.0f
+
 //=============================================================================
 //
 //
@@ -86,6 +87,26 @@ typedef enum Cooldown {
 } Cooldown;
 
 
+typedef enum Tile_Type {
+    TILE_TYPE_WATER,
+    TILE_TYPE_GRASS,
+    TILE_TYPE_TREE,
+    TILE_TYPE_TREE_RED,
+    TILE_TYPE_TREE_ORANGE,
+    TILE_TYPE_ROCK,
+    TILE_TYPE_SHRUB,
+    TILE_TYPE_SHRUB_PRUPLE,
+    TILE_TYPE_MAX
+} Tile_Type;
+
+typedef enum Unit_Type {
+    UNIT_TYPE_NONE,
+    UNIT_TYPE_MALE,
+    UNIT_TYPE_FEMALE,
+    UNIT_TYPE_ENEMY,
+    UNIT_TYPE_MAX
+} Unit_Type;
+
 // 24 bytes * 512 total units = 12 KB
 typedef struct Unit { 
     float x, y;
@@ -113,7 +134,11 @@ typedef struct Game_State {
     Vec2 camera;
     Tile tile[MAP_GRID_SIZE][MAP_GRID_SIZE];
     Unit ally[MAX_ARMY_SIZE];
+    int ally_count;
     Unit enemy[MAX_ARMY_SIZE];
+    int enemy_count;
+    Unit *selection[MAX_ARMY_SIZE];
+    int selection_count;
 } Game_State;
 
 Sys_Config init(int argc, char **argv) {
@@ -122,7 +147,7 @@ Sys_Config init(int argc, char **argv) {
     Sys_Config cfg = { 0 };
     cfg.width = 1024; // let's do 4:3 for the classic starcraft vibe
     cfg.height = 768;
-    cfg.memory = sys_alloc(1024 * 1024 * 4, 0); // 4 megabytes memory
+    cfg.memory = sys_alloc(1024 * 1024 * 8, 0); //
     cfg.title = "I have no idea what I am doing";
     // NOTE(rayalan): sys.h fails if you start fullscreen adn alt+enter
 
@@ -152,20 +177,49 @@ Sys_Config init(int argc, char **argv) {
     glBindTexture(GL_TEXTURE_2D, 0); 
 
 
-    srand(MAP_SEED);
-    // /TODO(rayalan): fill the map type information with random values between
-    //  0 and 16?
+    int map_seed = (int)sys_time_now() ^ (int)(&cfg);
+    srand(map_seed);
 
-#if 1
+    // MAP GENERATION
+    // ========================================================================
     for(int i = 0; i < MAP_GRID_SIZE; i++) {
         for(int j = 0; j < MAP_GRID_SIZE; j++) {
             // this means that the type can indicate any texture from the bottom row of the sprite sheet
-            state->tile[i][j].type = rand() % 9;
+            int k = (int)rand() % 100;
+            int t = 0;
+            if(k <= 15) { t = TILE_TYPE_WATER; }
+            else if (k <= 85) { t = TILE_TYPE_GRASS; }
+            else if (k <= 93) { t = TILE_TYPE_TREE; }
+            else if (k <= 96) { t = TILE_TYPE_TREE_RED; }
+            else if (k <= 97) { t = TILE_TYPE_TREE_ORANGE; }
+            else { t = TILE_TYPE_ROCK; }
+            state->tile[i][j].type = t;
         }
     }
-#endif 
+
     state->camera.x = 512;
     state->camera.y = 512;
+
+    // SPAWN UNITS
+    // ========================================================================
+    state->ally_count = 0;
+    state->enemy_count = 0;
+    for(int i = state->camera.x; i < state->camera.x + GRID_SIZE; i++) {
+        for(int j = state->camera.y; j < state->camera.y + GRID_SIZE; j++) {
+            if(state->tile[i][j].type == TILE_TYPE_GRASS) {
+                unsigned int k = rand() % 100;
+                if(k <= 5 && state->ally_count < MAX_ARMY_SIZE) {
+                    state->ally[state->ally_count].x = (float)i + 0.5f;
+                    state->ally[state->ally_count].y = (float)j + 0.5f;
+                    state->ally[state->ally_count].type = UNIT_TYPE_MALE;
+                    state->ally[state->ally_count].hp = 100;
+                    state->ally[state->ally_count].resource = 100;
+                    state->ally_count++;
+                }    
+            }
+        }
+    }
+
     return cfg;
 }
 
@@ -184,7 +238,6 @@ inline void init_gl(int w, int h)
 #define color_white 1.0f, 1.0f, 1.0f
 
 void loop(Sys_State *sys) {
-    double frame_start = sys_time_now();
     Game_State *state = (Game_State *)sys->memory.ptr;
     init_gl(sys->width, sys->height); 
 
@@ -194,21 +247,69 @@ void loop(Sys_State *sys) {
     if(sys_key_released(SYS_MOUSE_LEFT)) {
         state->mouse_released = vec2(sys->mouse.x, sys->mouse.y);
         // TODO(rayalan): this is where you select units
+        //
+        int pressed_x = state->camera.x + (int)(state->mouse_pressed.x * GRID_SIZE / sys->width);
+        int pressed_y = state->camera.x + (int)(state->mouse_pressed.y * GRID_SIZE / sys->height);
+        int released_x = state->camera.x + (int)(sys->mouse.x * GRID_SIZE / sys->width);
+        int released_y = state->camera.y + (int)(sys->mouse.y * GRID_SIZE / sys->height);
+        int box_left = (pressed_x <= released_x) ? pressed_x : released_x;
+        int box_right = (pressed_x >= released_x) ? pressed_x : released_x;
+        int box_top = (pressed_y <= released_y) ? pressed_y : released_y;
+        int box_bottom = (pressed_y >= released_y) ? pressed_y : released_y;
+
+        state->selection_count = 0;
+
+        for(int i = 0; i < MAX_ARMY_SIZE; i++) {
+            if(state->ally[i].type > UNIT_TYPE_NONE) {
+                int x = (int)state->ally[i].x;
+                int y = (int)state->ally[i].y;
+                if(x <= box_right && x >= box_left && y <= box_bottom && y >= box_top) {
+                    state->selection[state->selection_count] = &state->ally[i];
+                    state->selection_count++;
+                }
+            }
+        }
+ 
     }
 
-    if(sys_key_pressed('W')) {
+    if(sys_key_down('O')) {
         state->camera.y--;
     }
-    if(sys_key_pressed('S')) {
+    if(sys_key_down('L')) {
         state->camera.y++;
     }
-    if(sys_key_pressed('A')) {
+    if(sys_key_down('K')) {
         state->camera.x--;
     }
-    if(sys_key_pressed('D')) {
+    if(sys_key_down(SYS_KEY_SEMICOLON)) {
         state->camera.x++;
     }
     
+    if(sys_key_pressed(SYS_KEY_F2)) { // select all I guess?
+        state->selection_count = 0;
+       for(int i = 0; i < MAX_ARMY_SIZE; i++) {
+           if(state->ally[i].type > UNIT_TYPE_NONE) {
+               state->selection[state->selection_count] = &state->ally[i];
+               state->selection_count++;
+           }
+       }
+    }
+    if(sys_key_pressed(SYS_KEY_F3)) { // select all on screen I guess?
+        state->selection_count = 0;
+        for(int i = 0; i < MAX_ARMY_SIZE; i++) {
+            if(state->ally[i].type > UNIT_TYPE_NONE) {
+                if(state->ally[i].x >= state->camera.x && state->ally[i].x <= state->camera.x + GRID_SIZE
+                   && state->ally[i].y >= state->camera.y && state->ally[i].y <= state->camera.y + GRID_SIZE) {
+                    state->selection[state->selection_count] = &state->ally[i];
+                    state->selection_count++; 
+                }
+            }
+        }
+    }
+    if(sys_key_pressed(SYS_KEY_ESC)) { // select none
+        state->selection_count = 0;
+    }
+
     // DRAW map
     float render_size = 1.0f/ GRID_SIZE;
     float tile_size = 0.0625; // 1 / (128/8)
@@ -243,6 +344,39 @@ void loop(Sys_State *sys) {
     glBindTexture(GL_TEXTURE_2D, 0);
 
 
+    // DRAW allied units
+//    glBindTexture(GL_TEXTURE_2D, state->sprite_sheet.id);
+    glColor3f(color_white);
+    glPushMatrix();
+    {
+        glLoadIdentity();
+        glOrtho(0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f);
+        glBegin(GL_QUADS);
+            for(int i = 0; i < state->ally_count; i++) {
+                int map_x = (int)state->ally[i].x;
+                int map_y = (int)state->ally[i].y;
+                
+                if(map_x >= state->camera.x && map_x <= state->camera.x + GRID_SIZE
+                   && map_y >= state->camera.y && map_y <= state->camera.y + GRID_SIZE) {
+
+                    int draw_x = map_x - state->camera.x;
+                    int draw_y = map_y - state->camera.y;
+
+                    glVertex2f(draw_x * render_size, (draw_y+1) * render_size);
+                    glVertex2f((draw_x+1) * render_size, (draw_y+1) * render_size);
+                    glVertex2f((draw_x+1) * render_size, draw_y * render_size);
+                    glVertex2f(draw_x * render_size, draw_y * render_size);
+                    //__debugbreak();
+                }
+            }
+        glEnd();
+    }
+    glPopMatrix();
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+
+    // DRAW UI
+    // ========================================================================
     // DRAW selection box
     if(sys_key_down(SYS_MOUSE_LEFT)) {
         glColor4f(color_selection_box);
@@ -268,6 +402,7 @@ void loop(Sys_State *sys) {
     
     // draw minimap
     //glColor3f(color_pink);
+#if 0 
     glBindTexture(GL_TEXTURE_2D, state->sprite_sheet.id);
     glColor3f(1.0f, 1.0f, 1.0f);
     glPushMatrix();
@@ -285,8 +420,15 @@ void loop(Sys_State *sys) {
         glEnd();
     glPopMatrix();
     glBindTexture(GL_TEXTURE_2D, 0);
+#endif 
 
-    //glFlush();
+#if 1 // draw the number of units selected
+    char sel_text_buffer[64];
+    sprintf(sel_text_buffer, "%i units selected", state->selection_count);
+    glColor3f(color_white);
+    centered_string(sys->width/2.0f, sys->height * 0.1f, 1.0f, sel_text_buffer);
+#endif 
+
 }
 
 

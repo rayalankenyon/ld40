@@ -32,3 +32,13 @@ critical damage
 		slowly
 	under 1/4 hp units move very slowly, must be assisted
 	can be fixed with first aid
+
+
+tile types
+	water
+	grass
+	stone
+	tree
+	tree_apple
+	bush_painkiller
+	bush_medicine
