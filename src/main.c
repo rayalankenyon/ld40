@@ -277,8 +277,8 @@ void loop(Sys_State *sys) {
     if(sys_key_pressed(SYS_MOUSE_RIGHT)) {
         if(state->selection_count) {
             for(int i = 0; i < state->selection_count; i++) {
-                state->selection[i]->look_x = state->camera.x + (float)(state->mouse_pressed.x * GRID_SIZE / sys->width);
-                state->selection[i]->look_y =  state->camera.y + (float)(state->mouse_pressed.y * GRID_SIZE / sys->height);
+                state->selection[i]->look_x = (float)state->camera.x + ((float)sys->mouse.x * GRID_SIZE / sys->width);
+                state->selection[i]->look_y =  (float)state->camera.y + ((float)sys->mouse.y * GRID_SIZE / sys->height);
                 state->selection[i]->flags |= UNIT_FLAG_MOVING; 
             }
         }
@@ -323,8 +323,31 @@ void loop(Sys_State *sys) {
     }
 
 
-    // UPDATE logic
-    
+#define UNIT_TILES_PER_SECOND 5.0f
+    // UPDATE allied units
+    for(int i = 0; i < MAX_ARMY_SIZE; i++) {
+        
+        if(state->ally[i].x < state->ally[i].look_x + 0.1f && state->ally[i].x > state->ally[i].look_x - 0.1f
+                && (state->ally[i].flags & UNIT_FLAG_MOVING) && state->ally[i].y < state->ally[i].look_y + 0.1f 
+                && state->ally[i].y > state->ally[i].look_y - 0.1f) {
+            state->ally[i].flags ^= UNIT_FLAG_MOVING;
+        }
+
+        if(state->ally[i].x < state->ally[i].look_x && (state->ally[i].flags & UNIT_FLAG_MOVING)) {
+            
+            state->ally[i].x += sys->dt * UNIT_TILES_PER_SECOND;
+        }
+        if(state->ally[i].y < state->ally[i].look_y && (state->ally[i].flags & UNIT_FLAG_MOVING)) {
+            state->ally[i].y += sys->dt * UNIT_TILES_PER_SECOND;
+        }
+        if(state->ally[i].x > state->ally[i].look_x && (state->ally[i].flags & UNIT_FLAG_MOVING)) {
+            state->ally[i].x -= sys->dt * UNIT_TILES_PER_SECOND; 
+        }
+        if(state->ally[i].y > state->ally[i].look_y && (state->ally[i].flags & UNIT_FLAG_MOVING)) {
+            state->ally[i].y -= sys->dt * UNIT_TILES_PER_SECOND;
+        }
+
+    }
 
 
 
