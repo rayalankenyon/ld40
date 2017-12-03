@@ -23,7 +23,11 @@
 #define MAX_ARMY_SIZE 256
 #define GRID_SIZE 16
 #define LOG_FILE "log.txt"
-#define NOISE_STEP 1.0f
+#define SPRITE_SIZE 8
+
+#define UNIT_TILES_PER_SECOND 10.0f
+#define UNIT_ANIMATION_FRAMES 4
+#define UNIT_ANIMATION_FRAME_TIME 0.1f
 
 //=============================================================================
 //
@@ -116,7 +120,8 @@ typedef struct Unit {
     int hp;
     int resource;
     int flags; // is_moving / etc
-    float cooldowns[COOLDOWN_MAX];
+    int animation_frame;
+    float animation_time;
 } Unit;
 
 // 2 bytes * 1024 * 1024 = 2 MB 
@@ -174,6 +179,7 @@ Sys_Config init(int argc, char **argv) {
     stbi_set_flip_vertically_on_load(1);
     unsigned char *data = stbi_load(SPRITE_SHEET_NAME, &state->sprite_sheet.width, &state->sprite_sheet.height, &channels, 0);
     sys_assert(channels == 4);
+    sys_assert(state->sprite_sheet.width == state->sprite_sheet.height);
 
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, state->sprite_sheet.width, state->sprite_sheet.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
     stbi_image_free(data);
@@ -211,10 +217,10 @@ Sys_Config init(int argc, char **argv) {
         for(int j = state->camera.y; j < state->camera.y + GRID_SIZE; j++) {
             if(state->tile[i][j].type == TILE_TYPE_GRASS) {
                 unsigned int k = rand() % 100;
-                if(k <= 5 && state->ally_count < MAX_ARMY_SIZE) {
+                if(k <= 8 && state->ally_count < MAX_ARMY_SIZE) {
                     state->ally[state->ally_count].x = (float)i + 0.5f;
                     state->ally[state->ally_count].y = (float)j + 0.5f;
-                    state->ally[state->ally_count].type = UNIT_TYPE_MALE;
+                    state->ally[state->ally_count].type = k > 4 ? UNIT_TYPE_MALE : UNIT_TYPE_FEMALE;
                     state->ally[state->ally_count].hp = 100;
                     state->ally[state->ally_count].resource = 100;
                     state->ally_count++;
@@ -280,6 +286,7 @@ void loop(Sys_State *sys) {
                 state->selection[i]->look_x = (float)state->camera.x + ((float)sys->mouse.x * GRID_SIZE / sys->width);
                 state->selection[i]->look_y =  (float)state->camera.y + ((float)sys->mouse.y * GRID_SIZE / sys->height);
                 state->selection[i]->flags |= UNIT_FLAG_MOVING; 
+                state->selection[i]->animation_time = (float)sys_time_now();
             }
         }
     }
@@ -322,8 +329,6 @@ void loop(Sys_State *sys) {
         state->selection_count = 0;
     }
 
-
-#define UNIT_TILES_PER_SECOND 5.0f
     // UPDATE allied units
     for(int i = 0; i < MAX_ARMY_SIZE; i++) {
         
@@ -331,20 +336,28 @@ void loop(Sys_State *sys) {
                 && (state->ally[i].flags & UNIT_FLAG_MOVING) && state->ally[i].y < state->ally[i].look_y + 0.1f 
                 && state->ally[i].y > state->ally[i].look_y - 0.1f) {
             state->ally[i].flags ^= UNIT_FLAG_MOVING;
+            state->ally[i].animation_frame = 0;
+            state->ally[i].animation_time = 0;
         }
 
-        if(state->ally[i].x < state->ally[i].look_x && (state->ally[i].flags & UNIT_FLAG_MOVING)) {
-            
-            state->ally[i].x += sys->dt * UNIT_TILES_PER_SECOND;
-        }
-        if(state->ally[i].y < state->ally[i].look_y && (state->ally[i].flags & UNIT_FLAG_MOVING)) {
-            state->ally[i].y += sys->dt * UNIT_TILES_PER_SECOND;
-        }
-        if(state->ally[i].x > state->ally[i].look_x && (state->ally[i].flags & UNIT_FLAG_MOVING)) {
-            state->ally[i].x -= sys->dt * UNIT_TILES_PER_SECOND; 
-        }
-        if(state->ally[i].y > state->ally[i].look_y && (state->ally[i].flags & UNIT_FLAG_MOVING)) {
-            state->ally[i].y -= sys->dt * UNIT_TILES_PER_SECOND;
+        if(state->ally[i].flags & UNIT_FLAG_MOVING) {
+            state->ally[i].animation_time += sys->dt;
+            if(state->ally[i].animation_time >= UNIT_ANIMATION_FRAME_TIME) {
+                state->ally[i].animation_frame = (state->ally[i].animation_frame + 1) % UNIT_ANIMATION_FRAMES;
+                state->ally[i].animation_time = 0;
+            }
+            if(state->ally[i].x < state->ally[i].look_x) {
+                state->ally[i].x += sys->dt * UNIT_TILES_PER_SECOND;
+            }
+            if(state->ally[i].y < state->ally[i].look_y) {
+                state->ally[i].y += sys->dt * UNIT_TILES_PER_SECOND;
+            }
+            if(state->ally[i].x > state->ally[i].look_x) {
+                state->ally[i].x -= sys->dt * UNIT_TILES_PER_SECOND; 
+            }
+            if(state->ally[i].y > state->ally[i].look_y) {
+                state->ally[i].y -= sys->dt * UNIT_TILES_PER_SECOND;
+            }
         }
 
     }
@@ -355,7 +368,7 @@ void loop(Sys_State *sys) {
 
     // DRAW map
     float render_size = 1.0f/ GRID_SIZE;
-    float tile_size = 0.0625; // 1 / (128/8)
+    float tile_size = 1.0f / state->sprite_sheet.width * SPRITE_SIZE;
 
     // NOTE(rayalan): the camera position is the top left most square
     glBindTexture(GL_TEXTURE_2D, state->sprite_sheet.id);
@@ -388,7 +401,8 @@ void loop(Sys_State *sys) {
 
 
     // DRAW allied units
-//    glBindTexture(GL_TEXTURE_2D, state->sprite_sheet.id);
+    glBindTexture(GL_TEXTURE_2D, state->sprite_sheet.id);
+
     glColor3f(color_white);
     glPushMatrix();
     {
@@ -404,10 +418,16 @@ void loop(Sys_State *sys) {
 
                     int draw_x = map_x - state->camera.x;
                     int draw_y = map_y - state->camera.y;
+                    int tx = state->ally[i].animation_frame;
+                    int ty = state->sprite_sheet.width / SPRITE_SIZE - state->ally[i].type + 1;
 
+                    glTexCoord2f(tx * tile_size, (ty-1) * tile_size);
                     glVertex2f(draw_x * render_size, (draw_y+1) * render_size);
+                    glTexCoord2f((tx+1) * tile_size, (ty-1) * tile_size);
                     glVertex2f((draw_x+1) * render_size, (draw_y+1) * render_size);
+                    glTexCoord2f((tx+1) * tile_size, ty * tile_size);
                     glVertex2f((draw_x+1) * render_size, draw_y * render_size);
+                    glTexCoord2f(tx * tile_size, ty * tile_size);
                     glVertex2f(draw_x * render_size, draw_y * render_size);
                     //__debugbreak();
                 }
