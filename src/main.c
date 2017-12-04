@@ -66,7 +66,7 @@ void left_string(float x, float y, float size, char *text) {
 
 void centered_string(float x, float y, float size, char *text) {
     glPushMatrix();
-    int shift = stb_easy_font_width(text) / 2.0f;
+    int shift = stb_easy_font_width(text) / 2;
     glScalef(size, size, 1.0f);
     draw_string(x/size - shift, y/size, text);
     glPopMatrix();
@@ -148,23 +148,26 @@ typedef struct Game_State {
     Vec2 mouse_pressed;
     Vec2 camera;
     Tile tile[MAP_GRID_SIZE][MAP_GRID_SIZE];
-    Unit ally[MAX_ARMY_SIZE];
     int ally_count;
-    Unit enemy[MAX_ARMY_SIZE];
+    Unit ally[MAX_ARMY_SIZE];
     int enemy_count;
-    Unit *selection[MAX_ARMY_SIZE];
+    Unit enemy[MAX_ARMY_SIZE];
     int selection_count;
+    Unit *selection[MAX_ARMY_SIZE];
     float resource_ticks;
 } Game_State;
 
 Sys_Config init(int argc, char **argv) {
+    sys_unused(argc);
+    sys_unused(argv);
+
     freopen(LOG_FILE, "w", stdout);
 
     Sys_Config cfg = { 0 };
     cfg.width = 1024; // let's do 4:3 for the classic starcraft vibe
     cfg.height = 768;
     cfg.memory = sys_alloc(1024 * 1024 * 8, 0); //
-    cfg.title = "I have no idea what I am doing";
+    cfg.title = "ld40";
     // NOTE(rayalan): sys.h fails if you start fullscreen adn alt+enter
 
     Game_State *state = (Game_State *)cfg.memory.ptr;
@@ -369,7 +372,7 @@ void loop(Sys_State *sys) {
     }
     if(sys_key_pressed('Q')) {
         for(int i = 0; i < state->selection_count; i++) {
-            if(state->selection[i]->resource >= UNIT_COST) {
+            if(state->selection[i]->resource >= UNIT_COST && state->ally_count < MAX_ARMY_SIZE) {
                 state->selection[i]->resource -= UNIT_COST;
                 state->ally[state->ally_count].type = state->selection[i]->type;
                 state->ally[state->ally_count].x = state->selection[i]->x;
