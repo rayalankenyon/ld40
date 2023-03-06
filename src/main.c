@@ -35,7 +35,7 @@
 #define UNIT_COST 10
 
 // NOTE(rayalan): 1.0 maybe for a get the highest score you can type of game
-#define RESOURCE_DRAIN_TIME 1.0f
+#define RESOURCE_DRAIN_TIME 0.0f
 
 //=============================================================================
 //
@@ -168,7 +168,7 @@ Sys_Config init(int argc, char **argv) {
     cfg.height = 768;
     cfg.memory = sys_alloc(1024 * 1024 * 8, 0); //
     cfg.title = "ld40";
-    // NOTE(rayalan): sys.h fails if you start fullscreen adn alt+enter
+    cfg.monitor = SYS_MONITOR_PRIMARY;
 
     Game_State *state = (Game_State *)cfg.memory.ptr;
 
